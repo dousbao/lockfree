@@ -21,7 +21,7 @@ public:
 
 	~stack(void) noexcept
 	{
-		auto top = _top.load();
+		auto top = _top.load(std::memory_order_acquire);
 
 		while (top != nullptr) {
 			auto next = top->_next;
@@ -46,9 +46,10 @@ public:
 
 		try {
 			new_node->_data = new value_type(std::move(data));
-			new_node->_next = _top.load();
+			new_node->_next = _top.load(std::memory_order_acquire);
 
-			while (!_top.compare_exchange_weak(new_node->_next, new_node))
+			while (!_top.compare_exchange_weak(new_node->_next, new_node,
+				std::memory_order_release, std::memory_order_relaxed))
 				;
 		} catch (...) { delete new_node; throw std::current_exception(); }
 	}
@@ -61,7 +62,8 @@ public:
 		do {
 			if (old_top = hazard.protect(_top); old_top == nullptr)
 				return std::nullopt;
-		} while (!_top.compare_exchange_strong(old_top, old_top->_next));
+		} while (!_top.compare_exchange_strong(old_top, old_top->_next,
+			std::memory_order_release, std::memory_order_relaxed));
 		hazard.unprotect();
 
 		auto res = *old_top->_data;
